@@ -1,12 +1,17 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import requests
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists
+load_dotenv()
 
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 DATABASE_ID = os.environ["DATABASE_ID"]
 
-app = FastAPI()
+app = FastAPI(title="Notion Proxy API for Custom GPT")
 
 headers = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
@@ -18,6 +23,37 @@ class UpdateRequest(BaseModel):
     subject: str
     unit: str
     updatedNote: str
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return """
+    <html>
+        <head>
+            <title>Notion Proxy API</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                h1 { color: #2563eb; }
+                code { background-color: #f1f5f9; padding: 2px 5px; border-radius: 4px; }
+                pre { background-color: #f1f5f9; padding: 15px; border-radius: 8px; overflow-x: auto; }
+            </style>
+        </head>
+        <body>
+            <h1>Notion Proxy API for Custom GPT</h1>
+            <p>This API serves as a proxy between a Custom GPT and the Notion API.</p>
+            <h2>API Endpoints</h2>
+            <p><strong>POST /update-progress</strong> - Update a note in Notion</p>
+            <h3>Request Body Example:</h3>
+            <pre>
+{
+  "subject": "Math",
+  "unit": "Calculus",
+  "updatedNote": "Learned derivatives and integrals."
+}
+            </pre>
+            <p>For more details, see the <a href="/docs">API documentation</a>.</p>
+        </body>
+    </html>
+    """
 
 @app.post("/update-progress")
 def update_progress(data: UpdateRequest):
@@ -42,7 +78,7 @@ def update_progress(data: UpdateRequest):
     results = response.json().get("results", [])
 
     if not results:
-        return {"error": "No matching entry found."}, 404
+        raise HTTPException(status_code=404, detail="No matching entry found.")
 
     page = results[0]
     page_id = page["id"]
@@ -69,7 +105,7 @@ def update_progress(data: UpdateRequest):
 
     update_res = requests.patch(update_url, headers=headers, json=update_payload)
     if update_res.status_code != 200:
-        return {"error": "Failed to update the note."}, 500
+        raise HTTPException(status_code=500, detail="Failed to update the note.")
 
     return {
         "subject": data.subject,
